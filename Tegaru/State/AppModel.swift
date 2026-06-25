@@ -34,7 +34,11 @@ final class AppModel {
     /// - Returns: 起動した場合は実行 Task、ゲート無効で起動しない場合は nil。
     @discardableResult
     func reactToNewPost(memoID: PersistentIdentifier) -> Task<Void, Never>? {
-        guard gate.isEnabled else { return nil }
+        guard gate.isEnabled else {
+            AppLog.ai.notice("reactToNewPost: ゲート無効のため AI 起動せず")
+            return nil
+        }
+        AppLog.ai.info("reactToNewPost: AI リアクションを起動")
         let engine = self.engine
         return Task { await engine.start(memoID: memoID) }
     }

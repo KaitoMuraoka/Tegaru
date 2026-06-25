@@ -27,6 +27,17 @@ protocol AvailabilityProviding {
 /// Foundation Models 非対応の SDK / OS では常に `.unavailable` を返す（コアは縮退して稼働, Req 12.3）。
 struct ModelAvailabilityProvider: AvailabilityProviding {
     func current() -> AIAvailability {
+        let result = resolve()
+        switch result {
+        case .available:
+            AppLog.ai.info("ModelAvailability: available")
+        case .unavailable(let reason):
+            AppLog.ai.notice("ModelAvailability: unavailable — \(reason, privacy: .public)")
+        }
+        return result
+    }
+
+    private func resolve() -> AIAvailability {
         #if canImport(FoundationModels)
         if #available(iOS 26, macOS 26, *) {
             switch SystemLanguageModel.default.availability {
@@ -41,7 +52,7 @@ struct ModelAvailabilityProvider: AvailabilityProviding {
             return .unavailable(reason: "OS が Foundation Models 非対応")
         }
         #else
-        return .unavailable(reason: "Foundation Models が利用できない環境")
+        return .unavailable(reason: "Foundation Models が SDK に存在しない（canImport=false）")
         #endif
     }
 }

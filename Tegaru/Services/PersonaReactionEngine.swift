@@ -64,9 +64,11 @@ enum ReactionGeneratorFactory {
     static func make() -> any PersonaReactionGenerating {
         #if canImport(FoundationModels)
         if #available(iOS 26, macOS 26, *) {
+            AppLog.ai.info("ReactionGenerator: FoundationModels")
             return FoundationModelsReactionGenerator()
         }
         #endif
+        AppLog.ai.notice("ReactionGenerator: Null（Foundation Models 不在）")
         return NullReactionGenerator()
     }
 }
@@ -77,8 +79,10 @@ enum ReactionGeneratorFactory {
 /// (3) 関連メモがある場合のみ代表1体が気づきを1回生成。専用 `ModelContext` で書き込み UI を非ブロック（Req 9.4, 14.3）。
 @ModelActor
 actor PersonaReactionEngine {
-    private var generator: any PersonaReactionGenerating = NullReactionGenerator()
-    private var relatedFinder: any RelatedMemoFinder = TagOverlapFinder()
+    // 既定で実経路（Foundation Models / RAG）を注入する。これにより、外部からの非同期 configure を
+    // 待たずに本番の生成系が使われ、起動直後の投稿でも無反応にならない（configure はテスト用に上書き可）。
+    private var generator: any PersonaReactionGenerating = ReactionGeneratorFactory.make()
+    private var relatedFinder: any RelatedMemoFinder = RelatedMemoFinderFactory.make()
     private var reactionDelay: Duration = .milliseconds(400)
     private var relatedLimit = 3
 
@@ -97,13 +101,20 @@ actor PersonaReactionEngine {
 
     /// 対象メモ（永続 ID）に対し、関連メモ算出 → 全ペルソナのいいね/返信 → 気づきの順に生成・適用する。
     func start(memoID: PersistentIdentifier) async {
-        guard let memo = modelContext.model(for: memoID) as? Memo else { return }
+        guard let memo = modelContext.model(for: memoID) as? Memo else {
+            AppLog.ai.error("engine.start: 対象メモが見つからない")
+            return
+        }
         let personas = (try? modelContext.fetch(FetchDescriptor<Persona>())) ?? []
-        guard !personas.isEmpty else { return }
+        guard !personas.isEmpty else {
+            AppLog.ai.error("engine.start: ペルソナが0件（シード未了の可能性）")
+            return
+        }
 
         // (1) 関連メモはメモ単位に1回だけ算出し、全ペルソナで共有する（重複検索を回避）。
         let related = relatedFinder.relatedMemos(for: memo, limit: relatedLimit)
         let relatedBodies = related.map(\.body)
+        AppLog.ai.info("engine.start: personas=\(personas.count) related=\(related.count) generator=\(String(describing: type(of: self.generator)), privacy: .public)")
 
         // (2) ペルソナを1体ずつ逐次処理（遅延で時間差反映, Req 9.5/9.6）。
         for persona in personas {
@@ -115,8 +126,11 @@ actor PersonaReactionEngine {
                 )
                 apply(decision, from: persona, to: memo)
                 try? modelContext.save()
+                AppLog.ai.info("reaction applied: persona=\(persona.name, privacy: .public) like=\(decision.shouldLike ? "Y" : "N", privacy: .public) reply=\(decision.shouldReply ? "Y" : "N", privacy: .public)")
             } catch {
-                continue   // 個別の生成失敗はスキップ（コア継続性, Req 12.3）
+                // 個別の生成失敗はスキップ（コア継続性, Req 12.3）。理由はログに残す。
+                AppLog.ai.error("reaction failed: persona=\(persona.name, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                continue
             }
             if reactionDelay > .zero {
                 try? await Task.sleep(for: reactionDelay)
@@ -124,12 +138,14 @@ actor PersonaReactionEngine {
         }
 
         // (3) 関連メモがある場合のみ、代表1体が気づきを1回だけ生成する（Req 10.5）。
-        if !related.isEmpty, let representative = personas.first {
-            if let insight = try? await generator.insight(
+        guard !related.isEmpty, let representative = personas.first else { return }
+        do {
+            let insight = try await generator.insight(
                 memoBody: memo.body,
                 personaInstructions: representative.personality,
                 relatedBodies: relatedBodies
-            ),
+            )
+            if let insight,
                !insight.insightText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                related.indices.contains(insight.relatedMemoIndex) {
                 modelContext.insert(ReactionEvent(
@@ -140,7 +156,10 @@ actor PersonaReactionEngine {
                     insightText: insight.insightText
                 ))
                 try? modelContext.save()
+                AppLog.ai.info("insight applied: persona=\(representative.name, privacy: .public)")
             }
+        } catch {
+            AppLog.ai.error("insight failed: error=\(error.localizedDescription, privacy: .public)")
         }
     }
 

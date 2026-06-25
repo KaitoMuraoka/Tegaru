@@ -27,14 +27,9 @@ struct TegaruApp: App {
         // 起動フローの結線（Task 6.1）: シード + 可用性ゲート確定。
         let gate = AppBootstrap.bootstrap(container: container)
 
-        // リアクションエンジンを構築し、可用性に応じた生成系・RAG 経路を注入する（Task 6.3）。
+        // リアクションエンジンを構築する。生成系（Foundation Models）と RAG 経路は
+        // エンジンの既定値として注入済みのため、非同期 configure を待たずに本番経路で動作する。
         let engine = PersonaReactionEngine(modelContainer: container)
-        Task {
-            await engine.configure(
-                generator: ReactionGeneratorFactory.make(),
-                relatedFinder: RelatedMemoFinderFactory.make()
-            )
-        }
 
         _appModel = State(initialValue: AppModel(gate: gate, engine: engine))
     }
