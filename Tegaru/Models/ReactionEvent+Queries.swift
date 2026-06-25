@@ -12,7 +12,8 @@ import SwiftData
 extension ReactionEvent {
     /// アクティビティ一覧: リアクションを `createdAt` 降順で取得する（Req 11.2）。
     static var activityDescriptor: FetchDescriptor<ReactionEvent> {
-        FetchDescriptor<ReactionEvent>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        let sort = [SortDescriptor<ReactionEvent>(\.createdAt, order: .reverse)]
+        return FetchDescriptor<ReactionEvent>(sortBy: sort)
     }
 
     /// 指定メモを対象とする「気づき」イベントのみを抽出する（スレッドでの気づき提示, Req 10.5）。

@@ -10,28 +10,29 @@ import Foundation
 import SwiftData
 
 extension Memo {
+    /// 作成時刻の降順ソート（共通）。型推論を確定させるため明示的に `Memo` を指定する。
+    private static var byCreatedAtDescending: [SortDescriptor<Memo>] {
+        [SortDescriptor<Memo>(\.createdAt, order: .reverse)]
+    }
+
     /// タイムライン: ルートメモ（`author == nil && parent == nil`）を `createdAt` 降順で取得する。
     static var timelineDescriptor: FetchDescriptor<Memo> {
-        FetchDescriptor<Memo>(
-            predicate: #Predicate { $0.author == nil && $0.parent == nil },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
+        let predicate = #Predicate<Memo> { $0.author == nil && $0.parent == nil }
+        return FetchDescriptor<Memo>(predicate: predicate, sortBy: byCreatedAtDescending)
     }
 
     /// 本文の部分一致検索（`createdAt` 降順）。
     static func searchByBody(_ query: String) -> FetchDescriptor<Memo> {
-        FetchDescriptor<Memo>(
-            predicate: #Predicate { $0.body.localizedStandardContains(query) },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
+        let predicate = #Predicate<Memo> { $0.body.localizedStandardContains(query) }
+        return FetchDescriptor<Memo>(predicate: predicate, sortBy: byCreatedAtDescending)
     }
 
     /// 指定タグ名を持つメモの絞り込み（`createdAt` 降順）。
     static func searchByTag(_ name: String) -> FetchDescriptor<Memo> {
-        FetchDescriptor<Memo>(
-            predicate: #Predicate { memo in memo.tags.contains { $0.name == name } },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
+        let predicate = #Predicate<Memo> { memo in
+            memo.tags.contains { $0.name == name }
+        }
+        return FetchDescriptor<Memo>(predicate: predicate, sortBy: byCreatedAtDescending)
     }
 
     /// スレッド表示用に返信を `createdAt` 昇順で返す。
