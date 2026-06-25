@@ -1,7 +1,7 @@
 # 実装計画
 
 - [ ] 1. 基盤: データモデル・永続化・共有ユーティリティ
-- [ ] 1.1 SwiftData データモデル4種と関係・削除規則の定義
+- [x] 1.1 SwiftData データモデル4種と関係・削除規則の定義
   - `Memo` / `Persona` / `Tag` / `ReactionEvent` を `@Model` で定義する
   - 自己参照（親メモ↔返信）と多対多（いいね・タグ）の関係を inverse 明示で張り、`replies` と `ReactionEvent.targetMemo` を cascade、`likedBy`/`tags`/`author`/`replyMemo`/`relatedMemo` を nullify に設定する
   - 画像は外部保存属性、`Tag.name` は一意制約、`createdAt` 不変・`updatedAt` 任意とする
