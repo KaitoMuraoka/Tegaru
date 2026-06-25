@@ -8,6 +8,7 @@
 
 import Foundation
 import SwiftData
+import os
 
 #if canImport(FoundationModels)
 import FoundationModels

@@ -9,6 +9,7 @@
 import Foundation
 import SwiftData
 import Observation
+import os
 
 /// リアクションエンジン起動の抽象（テストでスパイ注入可能）。
 protocol ReactionStarting: Sendable {

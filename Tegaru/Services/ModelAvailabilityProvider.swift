@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 #if canImport(FoundationModels)
 import FoundationModels
