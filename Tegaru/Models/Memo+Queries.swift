@@ -41,4 +41,13 @@ extension Memo {
 
     /// ペルソナ（AI）による返信かどうか（`author != nil`）。
     var isPersonaReply: Bool { author != nil }
+
+    /// 親をたどってスレッドのルートメモを返す（アクティビティからの遷移先解決に使用, Req 11.3）。
+    var threadRoot: Memo {
+        var current = self
+        while let parent = current.parent {
+            current = parent
+        }
+        return current
+    }
 }

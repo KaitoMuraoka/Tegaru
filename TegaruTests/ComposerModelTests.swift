@@ -74,17 +74,19 @@ struct ComposerModelTests {
         #expect(model.imageData == nil)
     }
 
-    @Test("新規保存はメモサービスへ委譲し永続化する")
+    @Test("新規保存はメモサービスへ委譲し createdNew を返す")
     func saveNewDelegates() throws {
         let context = try makeContext()
         let model = ComposerModel(mode: .new)
         model.body = "保存される本文"
 
-        #expect(model.save(using: service(context)) == true)
+        guard case .createdNew = model.save(using: service(context)) else {
+            Issue.record("createdNew を返すべき"); return
+        }
         #expect(try context.fetchCount(FetchDescriptor<Memo>()) == 1)
     }
 
-    @Test("返信保存は parent を設定して保存する")
+    @Test("返信保存は parent を設定し createdNew を返す")
     func saveReplySetsParent() throws {
         let context = try makeContext()
         let parent = Memo(body: "親メモ")
@@ -93,21 +95,23 @@ struct ComposerModelTests {
 
         let model = ComposerModel(mode: .reply(parent: parent))
         model.body = "返信本文"
-        #expect(model.save(using: service(context)))
+        guard case .createdNew = model.save(using: service(context)) else {
+            Issue.record("createdNew を返すべき"); return
+        }
 
         #expect(Memo.sortedReplies(of: parent).map(\.body) == ["返信本文"])
     }
 
-    @Test("空本文の保存は失敗する")
+    @Test("空本文の保存は failed を返す")
     func saveEmptyFails() throws {
         let context = try makeContext()
         let model = ComposerModel(mode: .new)
         model.body = "   "
-        #expect(model.save(using: service(context)) == false)
+        #expect(model.save(using: service(context)) == .failed)
         #expect(try context.fetchCount(FetchDescriptor<Memo>()) == 0)
     }
 
-    @Test("編集保存は updatedAt を設定し本文を更新する")
+    @Test("編集保存は updated を返し updatedAt を設定・本文を更新する")
     func saveEditUpdates() throws {
         let context = try makeContext()
         let memo = Memo(body: "旧本文")
@@ -116,7 +120,7 @@ struct ComposerModelTests {
 
         let model = ComposerModel(mode: .edit(memo))
         model.body = "新本文"
-        #expect(model.save(using: service(context)))
+        #expect(model.save(using: service(context)) == .updated)
         #expect(memo.body == "新本文")
         #expect(memo.updatedAt != nil)
     }

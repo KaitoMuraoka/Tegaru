@@ -13,6 +13,7 @@ import PhotosUI
 struct ComposerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
 
     @State private var model: ComposerModel
     @State private var pickerItem: PhotosPickerItem?
@@ -50,10 +51,8 @@ struct ComposerView: View {
                     Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("投稿") {
-                        if model.save(using: makeService()) { dismiss() }
-                    }
-                    .disabled(!model.canPost)
+                    Button("投稿") { submit() }
+                        .disabled(!model.canPost)
                 }
             }
             .onChange(of: pickerItem) { _, newItem in
@@ -85,6 +84,19 @@ struct ComposerView: View {
                         .padding(6)
                 }
             }
+        }
+    }
+
+    /// 保存し、新規/返信のときだけ AI リアクションを起動して画面を閉じる（編集は AI 非起動, Req 16.7）。
+    private func submit() {
+        switch model.save(using: makeService()) {
+        case .createdNew(let memoID):
+            appModel.reactToNewPost(memoID: memoID)   // ゲート有効時のみ非同期起動（内部で判定）
+            dismiss()
+        case .updated:
+            dismiss()
+        case .failed:
+            break   // 空本文等。画面に留まる
         }
     }
 

@@ -8,6 +8,7 @@
 
 import Foundation
 import Observation
+import SwiftData
 
 /// コンポーザーの入力状態。新規・返信・編集の3モードを表現し、保存はメモサービスへ委譲する。
 @MainActor
@@ -17,6 +18,13 @@ final class ComposerModel {
         case new
         case reply(parent: Memo)
         case edit(Memo)
+    }
+
+    /// 保存結果。新規/返信は AI リアクション対象（`createdNew`）、編集は対象外（`updated`）。
+    enum SaveOutcome: Equatable {
+        case createdNew(PersistentIdentifier)
+        case updated
+        case failed
     }
 
     let mode: Mode
@@ -53,17 +61,24 @@ final class ComposerModel {
     func attachImage(_ data: Data) { imageData = data }
     func removeImage() { imageData = nil }
 
-    /// 保存をメモサービスへ委譲する。成功時 true（呼び出し側が画面を閉じる, Req 1.5）。
+    /// 保存をメモサービスへ委譲する。成功時、呼び出し側が画面を閉じる（Req 1.5）。
+    /// 新規/返信は `createdNew(id)`（AI 起動対象）、編集は `updated`（AI 非起動, Req 16.7）を返す。
     @discardableResult
-    func save(using service: MemoService) -> Bool {
+    func save(using service: MemoService) -> SaveOutcome {
         switch mode {
         case .new:
-            if case .success = service.create(body: body, imageData: imageData, parent: nil) { return true }
+            if case .success(let id) = service.create(body: body, imageData: imageData, parent: nil) {
+                return .createdNew(id)
+            }
         case .reply(let parent):
-            if case .success = service.create(body: body, imageData: imageData, parent: parent) { return true }
+            if case .success(let id) = service.create(body: body, imageData: imageData, parent: parent) {
+                return .createdNew(id)
+            }
         case .edit(let memo):
-            if case .success = service.update(memo, body: body, imageData: imageData) { return true }
+            if case .success = service.update(memo, body: body, imageData: imageData) {
+                return .updated
+            }
         }
-        return false
+        return .failed
     }
 }

@@ -13,6 +13,7 @@ struct ThreadDetailView: View {
     @Environment(\.modelContext) private var modelContext
 
     let parent: Memo
+    @Query(ReactionEvent.activityDescriptor) private var allEvents: [ReactionEvent]
     @State private var showReply = false
     @State private var showDeleteConfirm = false
 
@@ -26,6 +27,15 @@ struct ThreadDetailView: View {
                     showDeleteConfirm = true
                 } label: {
                     Label("削除", systemImage: "trash")
+                }
+            }
+
+            let insights = ReactionEvent.insights(in: allEvents, forTargetID: parent.id)
+            if !insights.isEmpty {
+                Section("気づき") {
+                    ForEach(insights) { event in
+                        InsightRow(event: event)
+                    }
                 }
             }
 
@@ -63,6 +73,31 @@ struct ThreadDetailView: View {
                 MemoService(context: modelContext, indexer: SpotlightIndexer()).delete(parent)
             }
             Button("キャンセル", role: .cancel) {}
+        }
+    }
+}
+
+/// ペルソナの「気づき」を提示し、参照元メモへ遷移できる行（Req 10.5）。
+private struct InsightRow: View {
+    let event: ReactionEvent
+
+    var body: some View {
+        let content = VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "lightbulb.fill")
+                    .foregroundStyle(AccentColor.color(for: event.persona?.accentColor ?? ""))
+                Text("\(event.persona?.name ?? "ペルソナ") の気づき")
+                    .font(.caption).bold()
+            }
+            Text(event.insightText ?? "")
+                .font(.callout)
+        }
+        .padding(.vertical, 2)
+
+        if let related = event.relatedMemo {
+            NavigationLink(value: related) { content }
+        } else {
+            content
         }
     }
 }
