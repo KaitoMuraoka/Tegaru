@@ -28,6 +28,7 @@ struct ComposerView: View {
                 TextField("いまどうしてる？", text: $model.body, axis: .vertical)
                     .lineLimit(5...)
                     .textFieldStyle(.plain)
+                    .accessibilityIdentifier("composerTextField")
 
                 imagePreview
 
@@ -53,6 +54,7 @@ struct ComposerView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("投稿") { submit() }
                         .disabled(!model.canPost)
+                        .accessibilityIdentifier("postButton")
                 }
             }
             .onChange(of: pickerItem) { _, newItem in

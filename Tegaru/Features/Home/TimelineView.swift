@@ -63,6 +63,7 @@ struct TimelineView: View {
         }
         .padding(20)
         .accessibilityLabel("新規メモ")
+        .accessibilityIdentifier("composeButton")
     }
 
     private var deleteDialogBinding: Binding<Bool> {
