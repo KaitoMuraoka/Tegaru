@@ -19,6 +19,19 @@ protocol RelatedMemoFinder {
     func relatedMemos(for memo: Memo, limit: Int) -> [Memo]
 }
 
+/// スコア付き関連メモ候補。`score` は大きいほど関連が強い。
+private struct ScoredMemo {
+    let memo: Memo
+    let score: Double
+}
+
+private extension Memo {
+    /// 過去の自分のルートメモ（作者なし・親なし）で、対象自身でないもの。
+    func isPastRootCandidate(excluding target: Memo) -> Bool {
+        id != target.id && author == nil && parent == nil
+    }
+}
+
 /// タグ重複スコアによる決定的なフォールバック実装（Req 10.4）。
 struct TagOverlapFinder: RelatedMemoFinder {
     func relatedMemos(for memo: Memo, limit: Int) -> [Memo] {
@@ -27,14 +40,20 @@ struct TagOverlapFinder: RelatedMemoFinder {
         guard !targetTags.isEmpty else { return [] }
 
         let candidates = (try? context.fetch(FetchDescriptor<Memo>())) ?? []
-        let scored = candidates
-            .filter { $0.id != memo.id && $0.author == nil && $0.parent == nil }   // 過去の自分のルートメモ
-            .map { ($0, Set($0.tags.map(\.name)).intersection(targetTags).count) }
-            .filter { $0.1 > 0 }
-            .sorted { lhs, rhs in
-                lhs.1 != rhs.1 ? lhs.1 > rhs.1 : lhs.0.createdAt > rhs.0.createdAt
-            }
-        return Array(scored.prefix(limit).map(\.0))
+
+        var scored: [ScoredMemo] = []
+        for candidate in candidates {
+            guard candidate.isPastRootCandidate(excluding: memo) else { continue }
+            let overlap = Set(candidate.tags.map(\.name)).intersection(targetTags).count
+            guard overlap > 0 else { continue }
+            scored.append(ScoredMemo(memo: candidate, score: Double(overlap)))
+        }
+
+        let ordered = scored.sorted { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.memo.createdAt > rhs.memo.createdAt   // 同点は新しい順
+        }
+        return ordered.prefix(limit).map { $0.memo }
     }
 }
 
@@ -51,13 +70,17 @@ struct EmbeddingFinder: RelatedMemoFinder {
             return fallback.relatedMemos(for: memo, limit: limit)
         }
 
-        let candidates = ((try? context.fetch(FetchDescriptor<Memo>())) ?? [])
-            .filter { $0.id != memo.id && $0.author == nil && $0.parent == nil && !$0.body.isEmpty }
+        let candidates = (try? context.fetch(FetchDescriptor<Memo>())) ?? []
 
-        let scored = candidates
-            .map { ($0, embedding.distance(between: memo.body, and: $0.body)) }
-            .sorted { $0.1 < $1.1 }   // コサイン距離が小さいほど類似
-        return Array(scored.prefix(limit).map(\.0))
+        var scored: [ScoredMemo] = []
+        for candidate in candidates {
+            guard candidate.isPastRootCandidate(excluding: memo), !candidate.body.isEmpty else { continue }
+            let distance = embedding.distance(between: memo.body, and: candidate.body)
+            scored.append(ScoredMemo(memo: candidate, score: -distance))   // 距離が小さいほどスコア大
+        }
+
+        let ordered = scored.sorted { $0.score > $1.score }
+        return ordered.prefix(limit).map { $0.memo }
         #else
         return fallback.relatedMemos(for: memo, limit: limit)
         #endif
